@@ -1,0 +1,170 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Video;
+using UnityEngine.UI;
+using System.Security.AccessControl;
+using UnityEngine.SceneManagement;
+using System.Diagnostics;
+
+public class Reproductor : MonoBehaviour
+{
+    [Header("Elementos reproductor")]
+    public VideoClip[] videoClips; //la lista de videos que se mostraran durante la experiencia.
+    public VideoPlayer videoPlayer; //reproductor 1 de videos.
+    public VideoPlayer videoPlayer2; //reproductor 2 de videos.
+
+    [Header("Elementos fade")]
+    public Image fade; //panel o elemento que realizara el fade in y fade out.
+    public float timeFade; //duracion del fade in y fade out (en segundos).
+
+    [Header("Cambio Escena")]
+    public int blackScene; //escena con la pantalla en negro
+
+    //Elementos privados
+    private List<int> vPar, vImpar; //en las listas vPar y vImpar se acomodaran las "direcciones" de los videos de la exp y su orden de presentacion.
+    private bool videoReproduciendo; //esta variable me indicara si el video ya acabo para empezar el siguiente.
+    private bool reproductorAsignado; //esta variable servira como "interruptor" para el cambio de la lista vPar a la vImpar.
+    private int i, j; // esta variable son los "iteradores" de las lista vPar e vImpar (indicadores de que video se esta reproduciendo).
+    private float timeVideo, remainingTime; //son los indicadores de en que segundos va el video.
+    private int segundosParado; //cuanto tiempo lleva en pausa el video(si el usuario se va).
+
+
+    void Awake()
+    {
+        videoPlayer.Pause(); //el video no se reproducira cuando se ejecute el programa.
+        videoPlayer2.Pause(); //el video no se reproducira cuando se ejecute el programa.
+    }
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        OrganizarVideos(); // se organizaran los videos de acuerdo a su orden de entrada en el editor.
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        if (videoReproduciendo == false) //se debe iniciar un nuevo video de la lista.
+        {
+            StartCoroutine(FadeOut()); //fade out(cuando inicia el video).
+            ReproducirVideo(); //reproducir siguiente video.
+        }
+        Cronometro(); //controla el tiempo de reproduccion del video.
+    }
+
+    void OrganizarVideos()
+    {
+        vPar = new List<int>(); //instanciar lista de enteros
+        vImpar = new List<int>(); //instanciar lista de enteros
+        for (int i = 0; i < videoClips.Length; i++)
+        {
+            if (i % 2 == 0) //es par
+            {
+                vPar.Add(i); //se agrega la "referencia" al video en la lista vPar.
+            }
+            else //es impar
+            {
+                vImpar.Add(i); //se agrega la "referencia" al video en la lista vImpar.
+            }
+        }
+    }
+
+    void ReproducirVideo()
+    {
+        if(reproductorAsignado == false && i < vPar.Count) //si se activo el interruptor del reproductor 1
+        {
+            videoPlayer.clip = videoClips[vPar[i]]; // siguiente video a reproducir de la lista.
+            videoPlayer.Play(); // se reproduce el video asignado.
+            timeVideo = (float)videoPlayer.length; //duracion del video asignado.
+            videoPlayer.loopPointReached += EndVideo; //finaliza la reproduccion del video.
+            i++; //se asigna la referencia al proximo video (por reproducir).
+            videoReproduciendo = true; //es un indicador de que aun no se debe seguir al siguiente video.
+            reproductorAsignado = true; //el "interruptor" cambia al reproductor numero 2.
+        }else if (reproductorAsignado == true && j < vImpar.Count) //si se activo el interruptor del reproductor 2
+        {
+            videoPlayer2.clip = videoClips[vImpar[j]]; // siguiente video a reproducir de la lista.
+            videoPlayer2.Play(); // se reproduce el video asignado.
+            timeVideo = (float)videoPlayer2.length; //duracion del video asignado.
+            videoPlayer2.loopPointReached += EndVideo; //finaliza la reproduccion del video.
+            j++; //se asigna la referencia al proximo video (por reproducir).
+            videoReproduciendo = true; //es un indicador de que aun no se debe seguir al siguiente video.
+            reproductorAsignado = false; //el "interruptor" cambia al reproductor numero 1.
+        }
+    }
+
+    void EndVideo(UnityEngine.Video.VideoPlayer vp) //finalizo el video.
+    {
+        videoReproduciendo = false; //empieza el nuevo video.
+    }
+
+    void Cronometro()
+    {
+        if (reproductorAsignado==false) //si el reproductor 1 esta activo.
+        {
+            remainingTime = timeVideo - (float)videoPlayer2.time; //tiempo restante del video.
+        }
+        else
+        {
+            remainingTime = timeVideo - (float)videoPlayer.time; //tiempo restante del video.
+        }
+
+        if (remainingTime <= timeFade) //si faltan x segundos del video.
+        {
+            FadeIn(); //fade in.
+        }
+    }
+
+    IEnumerator FadeOut()
+    {
+        fade.CrossFadeAlpha(0f, timeFade, false); //el panel fade cambia de 1f(visible) a 0f(invisible).
+        yield return new WaitForSeconds(timeFade); //espera x segundos.
+        fade.canvasRenderer.SetAlpha(0f); //el panel fade queda en 0f(invisible).
+    }
+
+    void FadeIn()
+    {
+        fade.CrossFadeAlpha(1f, timeFade, false); //el panel fade cambia de 0f(invisible) a 1f(visible).
+    }
+
+    public void StopVideo() //detener video
+    {
+        if (!videoPlayer.isPaused) //si el video se esta reproduciendo.
+        {
+            videoPlayer.Pause();
+            StartCoroutine(WaitForEnd());
+        }
+        else if (!videoPlayer2.isPaused)
+        {
+            videoPlayer2.Pause();
+            StartCoroutine(WaitForEnd());
+        }
+    }
+
+    IEnumerator WaitForEnd()
+    {
+        segundosParado++;
+        yield return new WaitForSeconds(1f); //espera un segundo para comprobar nuevamente si hay usuario.
+        print("La exp se acabara en: " + (10 - segundosParado));
+        if (segundosParado >= 10)
+        {
+            print("Cambio de escena a la escena en negro");
+            SceneManager.LoadScene(blackScene); //va a la escena en negro
+        }
+    }
+
+    public void ResumeVideo() //reiniciar reproduccion
+    {
+        if (videoPlayer.isPaused && reproductorAsignado == true) //si el video esta pausado.
+        {
+            videoPlayer.Play();
+            segundosParado = 0;
+        }
+        else if (videoPlayer2.isPaused && reproductorAsignado == false)
+        {
+            videoPlayer2.Play();
+            segundosParado = 0;
+        }
+    }
+
+}

@@ -1,0 +1,68 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using System.IO.Ports;
+using UnityEngine.Video;
+
+public class SensorPermanencia : MonoBehaviour
+{
+
+    [Header ("Comunicacion arduino-unity")]
+    public SerialPort serialPort = new SerialPort("COM3", 9600);
+    public float rangoMinimo; //rango de distancia en donde el usuario esta "interactuando" con la exp.
+    private string valorSensor;
+
+    [Header ("Control Audio")]
+    private AudioSource audioSource;
+
+    [Header("Comunicacion con el reproductor")]
+    public GameObject gameObject; //reproductor de los videos.
+    private Reproductor reproductor; //codigo del reproductor.
+
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        serialPort.Open();
+        serialPort.ReadTimeout = 100;
+        reproductor = gameObject.GetComponent<Reproductor>();
+        audioSource = GetComponent<AudioSource>();
+        audioSource.Play();
+        audioSource.volume = 0f;
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        try
+        {
+            if (serialPort.IsOpen)
+            {
+                valorSensor = serialPort.ReadLine();
+                print(valorSensor);
+                Permanencia(valorSensor);
+            }
+        }
+        catch (System.Exception ex)
+        {
+            ex = new System.Exception();
+        }
+    }
+
+    void Permanencia(string valor)
+    {
+        float vint;
+        float.TryParse(valor, out vint);
+        if (vint > rangoMinimo || vint == -1) //salio de la exp
+        {
+            reproductor.StopVideo(); //se llama a la funcion stop del script reproductor.
+            audioSource.volume = 1f;
+        }
+        else
+        {
+            reproductor.ResumeVideo(); //se llama a la funcion resume del script reproductor.
+            audioSource.volume = 0f;
+        }
+    }
+
+}

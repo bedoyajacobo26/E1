@@ -1,0 +1,104 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using System.IO.Ports;
+using UnityEngine.SceneManagement;
+using System.Runtime.Remoting.Messaging;
+
+public class SensorEntrada : MonoBehaviour
+{
+
+    [Header("Conexion arduino-unity.")]
+    public SerialPort serialPort = new SerialPort("COM3", 9600); //objeto que recibe la señal del arduino.
+
+    [Header("Control Escena")]
+    public int videoScene; //pasa de la escena en negro a la escena en donde se reproducen videos.
+    public int rangoDistancia; //distancia minima (sensor) para cambiar de escena.
+
+    [Header ("Control distancia")]
+    public Text text; //texto que aparece en la pantalla con la distancia.
+    private string valorSensor; //señal que recibe del arduino.
+
+    [Header("Control Audio")]
+    private AudioSource audioSource; //reproductor de sonido.
+    public float maxValue, minValue; //valores maximos y minimos de la distancia para mapear(el sonido).
+    private float maxVolumen = 1f; //volumen maximo a mapear.
+    private float minVolumen = 0f; //volumen minimo a mapear.
+    private float volumen; //volumen actual de la escena.
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        serialPort.Open();
+        serialPort.ReadTimeout = 100;
+        audioSource = GetComponent<AudioSource>(); 
+        audioSource.Play(); //se reproduce el sonido(de rio).
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        try
+        {
+            if (serialPort.IsOpen) // si el sensor esta activo.
+            {
+                valorSensor = serialPort.ReadLine(); //recibe la señal del sensor(arduino).
+                ActualizarTexto(valorSensor); //muestra por pantalla la distancia al sensor (US).
+                ControlEscena(valorSensor); //controla la distancia para cambiar escena.
+                volumen = MapValue(valorSensor); //volumen actual (sonido de rio).
+                ControlAudio(volumen); //control del volumen (sonido de rio).
+            }
+        }
+        catch (System.Exception ex) //si el sensor no esta activo.
+        {
+            ex = new System.Exception();
+        }
+    }
+
+    void ActualizarTexto(string valor)
+    {
+        text.text = "Distancia (cm): " + valor; //imprime por pantalla el valor de la distancia.
+    }
+
+    void ControlEscena(string valor) //controla la distancia y cambia de escena.
+    {
+        int valorInt; //variable que guardara la distancia(en cm) al sensor.
+        int.TryParse(valor, out valorInt); //conversion de string a int.
+        if (valorInt <= rangoDistancia && valorInt != -1) //si el usuario esta en el rango de la experiencia.
+        {
+            StartCoroutine(CargarEscena()); //inicia la escena del video.
+        }
+    }
+
+    IEnumerator CargarEscena() //"Prender la pantalla": Escena negro->Escena video.
+    {
+        yield return new WaitForSeconds(1.5f); //espera un segundo y medio para cambiar la escena.
+        SceneManager.LoadScene(videoScene); //"La pantalla se prende".
+    }
+
+    float MapValue(string oldValue)
+    {
+        if (oldValue != "-1")
+        {
+            float valor;
+            float.TryParse(oldValue, out valor);
+            float OldRange = (maxValue - minValue);
+            float NewRange = (maxVolumen - minVolumen);
+            float NewValue = (((valor - minValue) * NewRange) / OldRange) + minVolumen;
+
+            return (NewValue);
+        }
+        else
+        {
+            return (1f);
+        }
+
+    }
+
+    void ControlAudio(float volumen)
+    {
+        audioSource.volume = 1f - volumen; //mientras mas cerca se este al sensor,mas volumen tiene el sonido el rio.
+    }
+
+}
